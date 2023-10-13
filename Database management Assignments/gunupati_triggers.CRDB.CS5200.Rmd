@@ -1,0 +1,267 @@
+---
+Title: "Implementing a Relational Database"
+Course code: "CS5200"
+Course: "Database Management Systems"
+NUID:"002647248"
+---
+The first step in using sqlite in R Studio is to determine whether the "RSQLite" package is already installed. If not, install it. 
+To use the functions, import "RSQLite," and then connect to the database or other location where the actions will be carried out. If the file hasn't already been created, a new file will be generated.
+The specified path has been used to build a database called prosql.db, and tables are presently being created there
+
+```{r}
+library("RSQLite")
+fpath="C:/Users/welcome/Downloads/"
+dbfile="prosql.db"
+dbcon1<- dbConnect(RSQLite::SQLite(),paste0(fpath,dbfile))
+
+```
+
+pragma foreign_keys = on enforces foreign keys. This is usually necessary because by default, SQLite does not enforce foreign keys.you could use R chunk or sql chunk to enable pragma. 
+
+```{r}
+dbExecute(dbcon1, "PRAGMA foreign_keys = ON")
+```
+Writing conditions to drop a table if the table already exists.
+
+```{sql connection=dbcon1}
+DROP TABLE IF EXISTS ModuleAuthorTracker
+```
+
+```{sql connection=dbcon1}
+DROP TABLE IF EXISTS Module
+```
+
+```{sql connection=dbcon1}
+DROP TABLE IF EXISTS module_logger
+```
+
+```{sql connection=dbcon1}
+DROP TABLE IF EXISTS Author
+```
+
+```{sql connection=dbcon1}
+DROP TABLE IF EXISTS Affiliation
+```
+
+establishing a module-named table. Given that the term "number" is a reserved key word, it is not ideal for one of the attributes with the name "number" to have the same name. As a result, we changed number to "m number" and added other attributes as well. 
+
+
+```{sql connection=dbcon1}
+CREATE TABLE Module(
+m_number TEXT PRIMARY KEY NOT NULL, 
+title  TEXT NOT NULL,
+lengthinMin INTEGER NOT NULL)
+```
+
+
+#1To ensure that lengthinMin should be greater than zero, a trigger called Length in minimum was developed. If it is not, the trigger raises an exception saying that length in Minutes should be bigger than zero.
+
+
+```{sql connection=dbcon1}
+CREATE TRIGGER Length_in_minimum 
+BEFORE INSERT ON Module
+BEGIN
+SELECT CASE
+WHEN new.lengthinMin<=0
+THEN RAISE(abort,"length in Minutes should be greater than zero")
+END;
+END;
+```
+
+
+```{sql connection=dbcon1}
+CREATE TABLE module_logger(
+name text primary key not null,
+datecreated datetime
+)
+```
+
+#2generated a trigger called update module logger that updates the module logger's data, which includes the title and the date and time of any new row inserts.
+```{sql connection=dbcon1}
+CREATE TRIGGER update_module_logger 
+AFTER INSERT ON Module
+BEGIN
+INSERT INTO module_logger VALUES
+(
+NEW.title,
+CURRENT_TIMESTAMP
+);
+END;
+```
+
+Inserting values into Module table
+
+```{sql connection=dbcon1}
+INSERT INTO Module VALUES
+("a","Harrypotter",200),
+("b","Saregama",300),
+("c","dramatic",400)
+```
+
+#example for the trigger Length_in_minimum
+```{sql connection=dbcon1}
+INSERT INTO Module VALUES
+("d","Harrypotter",-1)
+```
+
+Retrieving Data from Module table
+```{sql connection=dbcon1}
+SELECT * FROM Module
+```
+
+#2example for trigger update_module_logger that results the title and the time created
+```{sql connection=dbcon1}
+select * from module_logger
+```
+
+establishing a Affiliation named lookup table with the required attributes
+
+```{sql connection=dbcon1}
+CREATE TABLE Affiliation(
+affid INTEGER PRIMARY KEY NOT NULL,
+affiliation TEXT NOT NULL
+)
+```
+
+
+
+#3The check valid_affiliation trigger was made to ensure that just affiliation was included in the set of pt, ft, and contract. if any affiliation is not in any of these the trigger aborts the query by returning the statement PT, FT, or Contract are only valid types
+
+```{sql connection=dbcon1}
+CREATE TRIGGER check_valid_affiliation
+BEFORE INSERT ON Affiliation 
+BEGIN SELECT CASE WHEN NEW.affiliation NOT IN ('PT', 'FT', 'Contract') THEN RAISE(ABORT, 'PT, FT, or Contract are only valid types')
+END;
+END;
+```
+
+
+Inserting values into Affiliation table
+
+```{sql connection=dbcon1}
+INSERT INTO Affiliation VALUES
+(11,"PT"),
+(22,"FT"),
+(33,"Contract")
+
+```
+
+#3example for the trigger check valid_affiliation trigger
+```{sql connection=dbcon1}
+INSERT INTO Affiliation VALUES
+(22,"PvT")
+```
+
+retrieving data from Affiliaiton table
+
+```{sql connection=dbcon1}
+select * from Affiliation
+```
+
+
+establishing a Author named table with the required attributes
+
+```{sql connection=dbcon1}
+CREATE TABLE Author(
+aid INTEGER PRIMARY KEY NOT NULL,
+name TEXT NOT NULL,
+email TEXT NOT NULL,
+affid INTEGER NOT NULL,
+FOREIGN KEY(affid) REFERENCES Affiliation(affid)
+)
+```
+
+#4email_validation trigger is created as to check if the email is valid or not. here we are checking with generic form of email id where it should contain @ and website it is and containing a dot or not if any of these are violated then we get the error Invalid EmailID"
+
+```{sql connection=dbcon1}
+CREATE TRIGGER email_validation BEFORE INSERT ON Author
+BEGIN 
+SELECT
+CASE
+WHEN NEW.email NOT LIKE "%_@__%.__%"
+THEN RAISE (ABORT,'Invalid email id') 
+END;
+END;
+```
+
+
+Inserting values into Author table
+
+```{sql connection=dbcon1}
+INSERT INTO Author VALUES
+(1,"jayantha","dara.j@gmail.com",11),
+(2,"jayatha","akuluri@gmail.com",22),
+(3,"jayan","nanduri.j@gmail.com",33),
+(4,"jayani","jayani@gmail.com",33)
+```
+#4example for the email_validation trigger
+
+```{sql connection=dbcon1}
+INSERT INTO Author VALUES
+(6,"jaha","dara.jgmail@com",11)
+```
+
+Data retrieving from Author table
+
+```{sql connection=dbcon1}
+select * from Author
+```
+
+
+
+
+The module and author tables has zero-many and many-many relationships and to decompose that we had a junction table hence we created a junction table named ModuleAuthorTracker having m_number and aid as both primary keys and foriegn keys.
+
+```{sql connection=dbcon1}
+CREATE TABLE ModuleAuthorTracker
+(
+m_number TEXT,
+aid INTEGER,
+PRIMARY KEY(m_number,aid),
+FOREIGN KEY(aid) REFERENCES Author(aid),
+FOREIGN KEY(m_number) REFERENCES Module(m_number)
+)
+
+```
+
+
+
+Inserting values into ModuleAuthorTracker table
+
+```{sql connection=dbcon1}
+INSERT INTO ModuleAuthorTracker(aid,m_number) VALUES
+(1,"a"),
+(1,"b"),
+(1,"c"),
+(2,"b"),
+(3,"c")
+
+```
+
+
+```{sql connection=dbcon1}
+INSERT INTO ModuleAuthorTracker(m_number,aid) VALUES
+("c",2)
+```
+
+
+Retriving data from ModuleAuthorTracker table
+
+```{sql connection=dbcon1}
+select * from ModuleAuthorTracker
+```
+Retriving Title,author and affiliation data from all the tables in database
+
+```{sql connection=dbcon1}
+select Module.title,Author.name,Affiliation.affiliation from Module 
+inner join ModuleAuthorTracker on Module.m_number=ModuleAuthorTracker.m_number
+inner join Author on Author.aid=ModuleAuthorTracker.aid
+inner join affiliation on Affiliation.affid=Author.affid
+
+```
+disconnect the database by using dbDisconnect command
+
+```{r}
+dbDisconnect(dbcon1)
+```
+

@@ -1,0 +1,100 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+
+library(sqldf)
+library(ggplot2)
+library("RSQLite")
+
+```
+
+
+#1
+(20 pts) In the R Notebook, connect to the SQLite MediaDB.db Download MediaDB.dbdatabase and then load, using SQL SELECT, the "invoice_items" table into a data frame called rs. Add a new column to rs for the item price called ItemPrice that is Quantity times UnitPrice. Using R, what is the 10% trimmed mean of the item prices (rounded to 2 decimals)? Do not use {sql} chunks for this question. You must use all R code; to do the SQL query use one of dbExecute(), dbGetQuery(), or dbSendQuery().
+```{r}
+
+fpath="C:/Users/welcome/Downloads/"
+dbfile="MediaDB.db"
+dbcon11=dbConnect(RSQLite::SQLite(),paste0(fpath,dbfile))
+
+dbGetQuery(dbcon11,"select * from invoice_items")
+
+rs<-dbGetQuery(dbcon11,"select invoice_items.* ,(UnitPrice*invoice_items.Quantity) AS ItemPrice from invoices as i inner join invoice_items on i.InvoiceId=invoice_items.InvoiceId")
+
+rs
+
+print(paste0("The Trimmed mean is ",mean(rs$ItemPrice,trim = 0.1)))
+```
+
+#2
+(30 pts) Using sqldf, write a SQL query against the data frame rs from the question above that finds the total amount for each invoice (i.e., the sum of the extended prices for the invoice_items in each invoice) and the number of items in the invoice. So, the result set contains rows that each have the invoice ID, the total, and the number of items. We could have done this against the database table as well, but we want to practice using SQL against an in-memory dataframe.
+```{r}
+res<-sqldf("select InvoiceId,count(Quantity) AS NumberOfItems,sum(ItemPrice*Quantity) AS total from rs group by InvoiceId")
+res
+```
+
+
+
+
+
+#3
+(30 pts) Using R and the result from the prior question, create a line chart of the total number of items in an invoice (x axis) versus the average total amount of an invoice (i.e., the total paid for all invoices with those number of items averaged) (y axis). Add proper axis labels.
+```{r}
+library(ggplot2)
+ggplot(data=res, aes(x=NumberOfItems, y=sum(total)/NumberOfItems)) + geom_line(color="green") + geom_point(color="pink") + xlab("Number of Items") + ylab("Average of Total Price of Items")+
+ggtitle("Number of Items VS Average of Total Price of Items")
+```
+
+#4
+(15 pts) Write and execute some combination of R code, loops in R, sqldf, dbWriteTable(), direct SQL ALTER and/or SQL UPDATE statements that applies a 10% discount to the total amount for each invoice if it has more than 10 items and stores that discounted amount in a new column in the invoices table called DiscPrice. If the invoice has 10 or fewer items of the same or of different items, then there is no discount and the DiscPrice is the original price. For example, if an item costs $10 and there are 11 items then the full price is $110 and the discounted price is $99. This cannot be solved fully in sqldf nor fully with just a single UPDATE. You will need to use a combination of techniques and some creativity. Any approach will be acceptable.
+
+```{r}
+dbExecute(dbcon11,"alter table invoices drop DiscPrice")
+```
+
+```{r}
+ss<-dbGetQuery(dbcon11,"select invoices.*,case
+           when count(Quantity)>10 then round(count(Quantity)*UnitPrice*0.9,2)
+           else round(count(Quantity)*UnitPrice,2) end as DiscPrice from invoice_items inner join invoices on invoices.InvoiceId=invoice_items.InvoiceId group by invoices.InvoiceId")
+ss
+```
+
+
+
+```{r}
+dbWriteTable(dbcon11,"invoices",ss,overwrite=TRUE)
+
+```
+
+#5
+(5 pts) Using a separate {r} chunk show that the update in (4) executed properly by displaying a part of the table.
+```{r}
+dbGetQuery(dbcon11,"select * from invoices")
+```
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,239 @@
+---
+title: "Store XML in a Database"
+author: "Gowreesh Gunupati"
+date: "2023-04-05"
+output: html_document
+---
+
+## R Markdown
+
+## Question 1:
+```{r}
+library(imager)
+link <- "http://imgur.com/vUxIAjj.jpeg"
+knitr::include_graphics(link)
+```
+```{r}
+library(XML)
+library(sqldf)
+```
+
+## Question 2:
+```{r}
+#load RSQLite package
+
+library(RSQLite)
+
+
+fpath = ""
+dbfile = "myDB.sqlite"
+
+# if database file already exists, connect to it, otherwise
+#create a new database
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+
+```
+
+### Enable Foreign Key Constraint.
+```{r} 
+dbExecute(dbcon, "PRAGMA foreign_keys = ON")
+```
+
+### Drop tables if they exist.
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Book
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Author
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Genre
+```
+
+### Create tables in the database.
+```{sql connection=dbcon}
+CREATE TABLE Author(
+  aid NUMBER NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (aid)
+);
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE Genre(
+  gid NUMBER NOT NULL,
+  genrename TEXT NOT NULL,
+  PRIMARY KEY (gid)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Book(
+  id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  price DOUBLE NOT NULL,
+  pubdate DATE NOT NULL,
+  description TEXT NOT NULL,
+  edition number,
+  aid NUMBER NOT NULL,
+  gid NUMBER NOT NULL,
+  FOREIGN KEY (aid) REFERENCES Author(aid),
+  FOREIGN KEY (gid) REFERENCES Genre(gid),
+  PRIMARY KEY (id)
+);
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Author
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Genre
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Book
+```
+## Question 3:
+```{r}
+library(XML)
+
+xmlFile <- "Books-v3.xml"
+
+dom <- xmlParse(xmlFile)
+
+# get the root node of the DOM tree
+r <- xmlRoot(dom)
+
+numberofBooks <- xmlSize(r)
+```
+
+Creating dataframes and loading data into tables in database.
+
+```{r}
+Books<-xmlToDataFrame(dom)
+
+Books$description<-gsub("\n","", Books$description)
+
+Books$price<-as.double(Books$price)
+
+Books$publish_date<-as.Date(Books$publish_date)
+
+Books$edition<-as.integer(Books$edition)
+
+Books$id<-1:nrow(Books)
+
+
+Books
+```
+
+creating a dataframe for genres DataFrame
+
+
+```{r}
+genres<-data.frame(name=unique(Books$genre))
+genres$gid<-1:nrow(genres)
+genres
+```
+
+```{r}
+Authors<-data.frame(name=unique(Books$author))
+Authors$aid<-1:nrow(Authors)
+Authors
+```
+
+```{r}
+query <- "INSERT INTO Author (aid, name ) VALUES"
+
+# Finish it with
+query <- paste(query, paste(sprintf('("%s", "%s")', Authors$aid, Authors$name), collapse = ","))
+```
+
+```{r}
+rs <- dbSendQuery(dbcon,query)
+dbClearResult(rs)
+```
+
+```{r}
+query <- "insert into Genre (gid, genrename ) VALUES"
+
+# Finish it with
+query <- paste(query, paste(sprintf('("%s", "%s")', genres$gid, genres$name), collapse = ","))
+```
+
+```{r}
+rs <- dbSendQuery(dbcon,query)
+dbClearResult(rs)
+```
+
+```{r}
+s<-sqldf("select Authors.aid from Authors join Books on Books.author=Authors.name")
+Books$aid<-s$aid
+g<-sqldf("select genres.gid from genres join Books on Books.genre=genres.name")
+Books$gid<-g$gid
+```
+
+
+```{r}
+query <- "insert into Book (id, title, price, pubdate, description,edition, aid, gid ) VALUES"
+
+# Finish it with
+query <- paste(query, paste(sprintf('("%s", "%s", "%s", "%s", "%s", "%s","%s","%s")', Books$id, Books$title, Books$price, Books$publish_date, Books$description,Books$edition, Books$aid, Books$gid), collapse = ","))
+```
+
+```{r}
+rs <- dbSendQuery(dbcon,query)
+dbClearResult(rs)
+```
+
+```{sql connection=dbcon}
+SELECT * FROM BOOK
+```
+
+### Displaying data loaded into the database form the XML.
+```{sql connection=dbcon}
+Select * from Book
+```
+
+```{sql connection=dbcon}
+Select * from Author
+```
+
+```{sql connection=dbcon}
+Select * from Genre
+```
+
+## Question 5:A
+```{sql connection=dbcon}
+SELECT COUNT(gid) as numOfGenres FROM (SELECT gid FROM Book GROUP BY gid HAVING COUNT(gid)>=3)
+```
+
+## Question 5:B
+```{sql connection=dbcon}
+SELECT strftime('%Y' , pubdate) as oldestYear from Book
+ORDER BY pubdate ASC
+LIMIT 1
+```
+
+
+## Question 5:C
+```{sql connection=dbcon}
+SELECT g.genrename, count(*) as numOfBooks, avg(price) from Book as b
+INNER JOIN Genre as g ON b.gid = g.gid
+GROUP BY g.gid
+```
+
+## Question 5:D
+```{sql connection=dbcon}
+SELECT b.title, a.name from Book as b INNER JOIN Author as a 
+ON b.aid = a.aid where b.price < 0.8 * (select avg(price) from Book) or
+b.price > 1.2* (select avg(price) from Book)
+```
+
+# Disconnect from Database after the program to free up database and other resources.
+```{r}
+dbDisconnect(dbcon)
+```

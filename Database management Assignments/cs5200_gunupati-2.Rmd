@@ -1,0 +1,141 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+library("RSQLite")
+fpath="C:/Users/welcome/Downloads/"
+
+dbfile="MediaDB.db"
+dbcon2<- dbConnect(RSQLite::SQLite(),paste0(fpath,dbfile))
+
+```
+
+```{r}
+dbExecute(dbcon2, "PRAGMA foreign_keys = ON")
+```
+
+
+#1
+What are the last name, city, state, and country of all customers who made at least one purchase and live either in Brazil or Canada? Do not list duplicates.
+```{sql connection=dbcon2}
+--
+SELECT DISTINCT Lastname,City,State,Country 
+FROM customers
+INNER JOIN invoices ON invoices.CustomerId=customers.CustomerId 
+WHERE customers.Country IN ("Brazil","Canada") 
+```
+
+#2
+What are the titles of each album and the number of tracks on each album? 
+```{sql connection=dbcon2}
+SELECT albums.Title,COUNT(tracks.TrackId) AS NumberofTracks 
+FROM albums 
+INNER JOIN tracks ON albums.AlbumId=tracks.AlbumId
+GROUP BY albums.AlbumId
+```
+
+#3
+List the number of tracks by genre, ordered from most to least, restricted to those genres for which there are at least five tracks.
+```{sql connection=dbcon2}
+SELECT genres.Name,COUNT(*) AS countTracks FROM genres INNER JOIN tracks ON genres.GenreId=tracks.GenreId GROUP BY genres.GenreId HAVING COUNT(*)>4  ORDER BY COUNT(*) desc
+```
+
+#4
+What is the average "tenure" of the employees in months, i.e., the time they have been working at our store? Use SQL to round the result to zero digit of precision, e.g., 23 instead of 23.4. Hint: SQLite does not support DATEDIFF but does support STRFTIME (see tutorialLinks to an external site.). You need to only take year and month into account.
+```{sql connection=dbcon2}
+--Assuming every month is having 30 days
+
+SELECT 
+round(avg((STRFTIME("%Y",CURRENT_DATE)-STRFTIME("%Y",HIREDATE))*12+(STRFTIME("%mm",CURRENT_DATE)-STRFTIME("%mm",HIREDATE)))) AS average_months FROM employees
+
+```
+
+#5
+What are the total number of unique customers for each Brazilian state (e.g., MG, SP, etc.), ordered alphabetically by state, who made at least one purchase (i.e., do not consider customers who never made a purchase)?
+```{sql connection=dbcon2}
+SELECT State,COUNT(DISTINCT customers.CustomerId) AS UniqueCustomers FROM customers 
+INNER JOIN invoices ON invoices.CustomerId=customers.CustomerId 
+WHERE customers.Country="Brazil" 
+GROUP BY state 
+ORDER BY state
+```
+
+#6
+How many customers never made a purchase, i.e., they appear in the customers table but not in the invoices table.
+```{sql connection=dbcon2}
+SELECT COUNT(*) AS CountNorows FROM customers WHERE CustomerId NOT IN (SELECT customers.CustomerId 
+FROM customers 
+INNER JOIN invoices ON invoices.CustomerId=customers.CustomerId)
+
+```
+
+#7
+How many albums contain the substring "symphony" in the album title?
+```{sql connection=dbcon2}
+SELECT COUNT(*) AS NumberofTitles FROM albums WHERE Title LIKE "%symphony%" 
+```
+
+#8
+What is the total "time" of all tracks per artist in hours, i.e., add up the "Milliseconds" column in tracks? Display the artist's name and the time in hours rounded to two decimals. Only consider artists who published at least one track.
+
+```{sql connection=dbcon2}
+SELECT artists.Name,ROUND(sum(tracks.Milliseconds)/(1000.0*60.0*60.0),2) AS time 
+FROM tracks 
+INNER JOIN albums ON tracks.AlbumId=albums.AlbumId 
+INNER JOIN artists ON albums.ArtistId=artists.ArtistId 
+GROUP BY artists.ArtistId
+```
+#9
+Which playlists are the longest (greater than 0), regardless of type and format? List the playlist name(s) and the time in two columns: one for hours and one for minutes.
+```{sql connection=dbcon2}
+
+-- if the total time is 2.5 hours this query will return 2 in hours and 30 in minutes
+
+
+
+
+CREATE VIEW leela
+ AS SELECT playlists.PlaylistId,playlists.Name,(sum(tracks.Milliseconds))/(1000*60*60) AS Hours,
+ROUND((sum(tracks.Milliseconds)/(1000.0*60.0*60.0) - (SUM(tracks.Milliseconds))/(1000*60*60))*60,2) as Minutes
+FROM tracks
+INNER JOIN playlist_track ON tracks.TrackId=playlist_track.TrackId 
+INNER JOIN playlists ON playlists.PlaylistId=playlist_track.PlaylistId
+GROUP BY playlists.PlaylistId
+ORDER BY Hours desc;
+
+
+
+```
+```{sql connection=dbcon2}
+select * from leela 
+```
+
+
+```{sql connection=dbcon2}
+--select l.* from leela 
+
+select l.* from leela l where hours=(select max(hours) from leela)
+```
+
+
+
+
+
+
+
+#10
+Which artists have composed tracks in more than three different genres? List the artists name and the number of distinct genres they have compositions in. Do not list duplicates.
+
+```{sql connection=dbcon2}
+SELECT artists.Name,COUNT(DISTINCT genres.GenreId) AS count1,GROUP_CONCAT(DISTINCT genres.Name)  AS name 
+FROM artists 
+INNER JOIN albums ON albums.ArtistId=artists.ArtistId 
+INNER JOIN tracks ON albums.AlbumId=tracks.AlbumId
+INNER JOIN genres ON tracks.GenreId=genres.GenreId 
+GROUP BY artists.ArtistId 
+HAVING count1>3
+```

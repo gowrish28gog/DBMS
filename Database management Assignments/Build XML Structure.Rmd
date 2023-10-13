@@ -1,0 +1,121 @@
+---
+title: "Build XML Structure "
+author: "Gowreesh Gunupati"
+date: "2023-04-02"
+output: html_document
+---
+Question 1 (80 Points)
+Create a sample XML document that implements the conceptual data model expressed in UML and shown below. Invent 5-10 instances that allow you to demonstrate the structure. Create an appropriate internal DTD. This is a specific set of instances -- you can come up them as you see fit. Be sure to view the XML to ensure it validates. Use <log> as the name of the "root" element of the XML document. pid, tid, and vid are primary key attributes in each of the entities. You need to add appropriate "links" so that the pages visits are linked to the appropriate page and visitor -- use the patterns to decide on an approach. There are multiple ways to solve this.
+
+<!-- <?xml version="1.0"?> -->
+
+<!-- <!DOCTYPE log [ -->
+<!-- <!ELEMENT log (Visit*, Page+ ,Visitor+)> -->
+<!-- <!ELEMENT Visit (vdate,vtime)> -->
+<!-- <!ELEMENT vdate (#PCDATA)> -->
+<!-- <!ELEMENT vtime (#PCDATA)> -->
+<!-- <!ATTLIST Visit tid CDATA #REQUIRED> -->
+<!-- <!ATTLIST Visit pid CDATA #REQUIRED> -->
+<!-- <!ATTLIST Visit vid CDATA #REQUIRED> -->
+<!-- <!ELEMENT Page (url)> -->
+<!-- <!ATTLIST Page pid CDATA #REQUIRED> -->
+<!-- <!ELEMENT url (#PCDATA)> -->
+<!-- <!ELEMENT Visitor (ip)> -->
+<!-- <!ATTLIST Visitor vid CDATA #REQUIRED> -->
+<!-- <!ELEMENT ip (#PCDATA)> -->
+<!-- ]> -->
+
+<!-- <log> -->
+<!--   <Page pid="100"> -->
+<!--     <url>http://artificium.us/lessons/l101.html</url> -->
+<!--   </Page> -->
+<!--   <Page pid="200"> -->
+<!--     <url>http://articificum.us/courses/cs1100.html</url> -->
+<!--   </Page> -->
+<!--   <Page pid="300"> -->
+<!--     <url>https://www.google.com/</url> -->
+<!--   </Page> -->
+<!--   <Page pid="400"> -->
+<!--     <url>https://www.yahoo.com/</url> -->
+<!--   </Page> -->
+<!--   <Page pid="500"> -->
+<!--     <url>https://www.kinderjoy.com/</url> -->
+<!--   </Page> -->
+<!--   <Page pid="600"> -->
+<!--     <url>https://www.wonderland.com/</url> -->
+<!--   </Page> -->
+<!--   <Visit tid="1" pid="100" vid="101"> -->
+<!--     <vdate>2021-09-30</vdate> -->
+<!--     <vtime>20:03:44</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="2" pid="200" vid="101"> -->
+<!--     <vdate>2021-08-31</vdate> -->
+<!--     <vtime>21:03:44</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="3" pid="300" vid="102"> -->
+<!--     <vdate>2022-01-01</vdate> -->
+<!--     <vtime>21:43:49</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="4" pid="400" vid="103"> -->
+<!--     <vdate>2022-02-02</vdate> -->
+<!--     <vtime>11:43:49</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="5" pid="500" vid="101"> -->
+<!--     <vdate>2022-02-03</vdate> -->
+<!--     <vtime>01:43:49</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="6" pid="500" vid="101"> -->
+<!--     <vdate>2022-02-04</vdate> -->
+<!--     <vtime>03:43:49</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="7" pid="600" vid="102"> -->
+<!--     <vdate>2022-03-04</vdate> -->
+<!--     <vtime>04:43:49</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="8" pid="600" vid="103"> -->
+<!--     <vdate>2022-04-05</vdate> -->
+<!--     <vtime>05:43:49</vtime> -->
+<!--   </Visit> -->
+<!--   <Visit tid="9" pid="600" vid="102"> -->
+<!--     <vdate>2022-05-03</vdate> -->
+<!--     <vtime>06:43:49</vtime> -->
+<!--   </Visit> -->
+<!--    <Visitor vid="101"> -->
+<!--     <ip>165.11.33.45</ip> -->
+<!--   </Visitor> -->
+<!--   <Visitor vid="102"> -->
+<!--     <ip>143.33.0.3</ip> -->
+<!--   </Visitor> -->
+<!--   <Visitor vid="103"> -->
+<!--     <ip>146.33.0.3</ip> -->
+<!--   </Visitor> -->
+<!-- </log> -->
+
+
+```{r}
+library("XML")
+library("stringr")
+```
+```{r}
+xml<-"page.xml"
+dom<-xmlParse(xml,validate = T)
+```
+
+Question 2 (20 Points)
+
+Read the XML into R (with validation) and then use XPath to find the total number of visits for some page (pick one from your sample instances). Print the result to show that your XML was correctly encoded, validates, and can be processed. Hint: you cannot use xmlToDataFrame() to read the XML back into a single data frame.
+
+```{r}
+visits<-xpathSApply(dom,"//Visit")
+```
+
+
+```{r}
+for(i in 1:length(visits)){
+  aVisit <- visits[[i]]
+  visitsPerPage <- xpathSApply(aVisit, 
+                       "//Visit[@pid = '500']")
+}
+print(length(visitsPerPage))
+```
+
