@@ -1,0 +1,255 @@
+---
+title: "R Notebook"
+author: "Vasumathi Narayanan"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+---
+## 1 BCNF Normalized ER Diagram
+```{r}
+knitr::include_graphics("http://imgur.com/vUxIAjj.jpeg")
+```
+
+```{r}
+library(RSQLite)
+library(XML)
+library(DBI)
+library(sqldf)
+
+xmlfile <- "Books-v3.xml"
+xmlDOM <- xmlParse(xmlfile)
+dbfile = "Book.db"
+bookDbCon <- dbConnect(RSQLite::SQLite(), dbfile)
+r <- xmlRoot(xmlDOM)
+numBook <- xmlSize(r)
+```
+
+## 2 Create a SQLite database that implements the schema
+```{sql connection=bookDbCon}
+DROP TABLE IF EXISTS book;
+```
+
+```{sql connection=bookDbCon}
+DROP TABLE IF EXISTS Book_Author;
+```
+
+```{sql connection=bookDbCon}
+DROP TABLE IF EXISTS Genre;
+```
+
+```{sql connection=bookDbCon}
+DROP TABLE IF EXISTS Author;
+```
+
+```{sql connection=bookDbCon}
+DROP TABLE IF EXISTS Book_Genre;
+```
+
+## Creating the Tables
+
+### Book_Author Join Table
+```{sql connection= bookDbCon}
+CREATE TABLE Book_Author(
+book_id INT,
+author_id INT,
+PRIMARY KEY(book_id)
+);
+```
+### Author Table
+```{sql connection= bookDbCon}
+CREATE TABLE Author(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+name TEXT
+);
+```
+
+### Genre Table
+```{sql connection= bookDbCon}
+CREATE TABLE Genre(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+name TEXT
+);
+```
+### Book_Genre Table
+```{sql connection= bookDbCon}
+CREATE TABLE Book_Genre(
+book_id INT,
+genre_id TEXT,
+PRIMARY KEY(book_id)
+);
+```
+### Book Table
+```{sql connection=bookDbCon}
+CREATE  TABLE book(
+id INT PRIMARY KEY,
+title TEXT,
+edition INT,
+price TEXT,
+publish_date DATE,
+description TEXT
+);
+```
+
+
+## 3 Load XML file into R Dataframe
+## Creating the R DataFrame
+```{r}
+bookDf <- data.frame(id = vector(mode = "integer", length = numBook),
+                      author = vector(mode = "character", length = numBook),
+                      title = vector(mode = "character", length = numBook),
+                      edition = vector(mode = "integer", length = numBook),
+                      genre = vector(mode = "character", length = numBook),
+                      price = vector(mode = "character", length = numBook),
+                      publish_date = vector(mode = "character", length = numBook),
+                      description = vector(mode = "character", length = numBook))
+```
+```{r}
+authorDf <- data.frame(name = vector(mode = "character"))
+```
+```{r}
+genreDf <- data.frame(name = vector(mode = "character"))
+```
+
+## Parse the XML into Dataframe
+```{r}
+for(i in 1:numBook)
+{
+  onebook <- r[[i]]
+  
+  id <- xmlAttrs(onebook)
+  author <- xmlValue(onebook[[1]])
+  title <- xmlValue(onebook[[2]])
+  if(xmlName(onebook[[3]]) == "edition")
+  {
+    edition <- xmlValue(onebook[[3]])
+    genre <- xmlValue(onebook[[4]])
+    price <- xmlValue(onebook[[5]])
+    publish_date <- xmlValue(onebook[[6]])
+    description <- xmlValue(onebook[[7]])
+  }
+  else
+  {
+    edition <- NULL
+    genre <- xmlValue(onebook[[3]])
+    price <- xmlValue(onebook[[4]])
+    publish_date <- xmlValue(onebook[[5]])
+    description <- xmlValue(onebook[[6]])}
+  
+  bookDf[i,]$id <- id
+  bookDf[i,]$author <- author
+  bookDf[i,]$edition <- edition
+  bookDf[i,]$title <- title
+  bookDf[i,]$genre <- genre
+  bookDf[i,]$price <- price
+  bookDf[i,]$publish_date <- publish_date
+  bookDf[i,]$description <- description
+}
+```
+
+```{r}
+head(bookDf)
+```
+### Loading Genre Table
+```{r}
+genreDf <- sqldf::sqldf("SELECT DISTINCT(TRIM(genre)) AS name
+                              from [bookDf]");
+dbWriteTable(bookDbCon, "Genre", genreDf, append = TRUE, row.names = FALSE)
+genreDf$id <- seq(1, nrow(genreDf))
+head(genreDf)
+```
+### Validating Genre table Population.
+
+```{sql connection=bookDbCon}
+SELECT * FROM Genre;
+```
+
+### Loading Genre Table
+```{r}
+authorDf <- sqldf::sqldf("SELECT DISTINCT(TRIM(author)) AS name
+                              from [bookDf]");
+
+dbWriteTable(bookDbCon, "Author", authorDf, append = TRUE, row.names = FALSE)
+authorDf$id <- seq(1, nrow(authorDf))
+authorDf
+```
+### Validating Author table Population.
+
+```{sql connection=bookDbCon}
+SELECT * FROM Author;
+```
+### Loading Book_Author Table
+
+```{r}
+bookAuthorDf <- sqldf::sqldf("SELECT id AS book_id, author AS author_id
+                              from [bookDf]");
+for(r in 1:nrow(bookAuthorDf))
+{
+  a <- authorDf$id[which(authorDf$name == bookAuthorDf$author_id[r] )]
+  bookAuthorDf$author_id[r] <- a[[1]][1]
+}
+head(bookAuthorDf)
+dbWriteTable(bookDbCon, "Book_Author", bookAuthorDf, append = TRUE, row.names = FALSE)
+```
+### Validating Book_Author table Population.
+
+```{sql connection=bookDbCon}
+SELECT * FROM Book_Author;
+```
+
+### Loading Book_Genre Table
+
+```{r}
+bookGenreDf <- sqldf::sqldf("SELECT id AS book_id, genre AS genre_id
+                              from [bookDf]");
+for(r in 1:nrow(bookGenreDf))
+{
+  a <- genreDf$id[which(genreDf$name ==bookGenreDf$genre_id[r] )]
+  bookGenreDf$genre_id[r] <- a[[1]][1]
+}
+bookGenreDf
+dbWriteTable(bookDbCon, "Book_Genre", bookGenreDf, append = TRUE, row.names = FALSE)
+```
+### Validating Book_Genre table Population.
+
+```{sql connection=bookDbCon}
+SELECT * FROM Book_Genre;
+```
+### Loading Book Table
+```{r}
+bookDf <- sqldf::sqldf("SELECT DISTINCT id, title,edition,price,publish_date, description
+                              from [bookDf]");
+
+bookDf
+dbWriteTable(bookDbCon,"book",bookDf,append = TRUE, row.names = FALSE)
+```
+### Validating book table Population.
+
+```{sql connection=bookDbCon}
+SELECT * FROM book;
+```
+##Q A What is the number of genres have at least three books?
+```{sql connection=bookDbCon}
+SELECT COUNT(*) as NumberOfGeneres FROM 
+(SELECT Book_Genre.genre_id ,COUNT(*) FROM book, Book_Genre where book.id = Book_Genre.book_id GROUP BY Book_Genre.genre_id HAVING COUNT(book.id) >= 3)
+```
+## 5 B What is the oldest year in which a publication was published?
+```{sql connection=bookDbCon}
+SELECT MAX(strftime('%Y', publish_date)) as Oldest_Year FROM book
+```
+## 5 C Find the number of books and average price for each genre.
+```{sql connection=bookDbCon}
+SELECT Genre.name, COUNT(*) as numOfBooks, AVG(price) as avgPrice FROM book, Book_Genre, Genre where book.id = Book_Genre.book_id AND Book_Genre.genre_id= Genre.id GROUP BY Genre.id
+```
+## 5 D List the title and author of all books that are less than 0.8*AVG or more than 1.2*AVG, where AVG is the average price of all books. 
+```{sql connection=bookDbCon}
+SELECT book.title, Author.name 
+FROM book, Book_Author
+JOIN Author ON book.id= Book_Author.book_id AND Book_Author.author_id = Author.id
+WHERE book.price < 0.8*(SELECT AVG(price) FROM book) OR book.price > (SELECT 1.2*AVG(price) FROM book)
+```
+
+```{r}
+dbDisconnect(bookDbCon)
+```
